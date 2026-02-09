@@ -44,41 +44,60 @@
         let items = [];
 
         // LIFF初期化 & データ取得
+        // LIFF初期化 & データ取得
         window.onload = async function() {
             try {
                 // 1. LIFF初期化
                 await liff.init({ liffId: LIFF_ID });
+
+                // ★追加: ログインしていなければ強制ログイン
+                // UserIDがないと商品データが引けないため
+                if (!liff.isLoggedIn()) {
+                    liff.login();
+                    return; // ログイン画面へ遷移するのでここで終了
+                }
+
+                // 2. UserIDを取得
+                const context = liff.getContext();
+                const userId = context.userId;
+
+                if (!userId) {
+                    throw new Error("UserIDが取得できませんでした");
+                }
+
+                document.getElementById("loader").innerText = "商品データを読み込み中...";
+
+                // 3. GASへ問い合わせ (userIdを付与！)
+                // 末尾に ?userId=xxx をつけてアクセスします
+                const fetchUrl = `${GAS_API_URL}?userId=${userId}`;
                 
-                // 2. GASから商品データ取得
-                const response = await fetch(GAS_API_URL);
+                const response = await fetch(fetchUrl);
                 const data = await response.json();
 
-                // ★追加: データの中身チェック
-                if (Array.isArray(data)) {
-                    // 成功時: 配列ならそのまま使う
-                    items = data;
-                } else {
-                    // 失敗時: エラー内容を表示して終了
-                    alert("データ取得エラー:\n" + JSON.stringify(data));
-                    document.getElementById("loader").innerText = "データの形式が不正です";
-                    return; 
+                // エラーチェック
+                if (!Array.isArray(data)) {
+                    // エラーメッセージが含まれている場合
+                    if (data.error) {
+                        throw new Error("GASエラー: " + data.error);
+                    } else {
+                        throw new Error("データ形式が不正です");
+                    }
                 }
+
+                // 成功時
+                items = data;
                 
-                // 3. 画面生成
+                // 4. 画面生成
                 renderForm();
                 document.getElementById("loader").style.display = "none";
                 document.getElementById("orderForm").style.display = "block";
-
-                // 4. ログインチェック
-                if (!liff.isLoggedIn()) {
-                    liff.login();
-                } else {
-                    checkForm();
-                }
+                
+                // ボタンの有効化チェック
+                checkForm();
 
             } catch (err) {
-                alert("通信エラー: " + err.message);
-                document.getElementById("loader").innerText = "読み込み失敗";
+                alert("読み込みエラー: " + err.message);
+                document.getElementById("loader").innerText = "読み込み失敗: " + err.message;
             }
         };
         // フォーム描画関数
