@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>見積もりフォーム</title>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background-color: #f0f0f0; padding-bottom: 100px; }
+    .card { background: white; padding: 15px; margin-bottom: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    label { display: block; font-weight: bold; margin-bottom: 5px; color: #333; }
+    .price { font-size: 0.85em; color: #666; margin-bottom: 8px; }
+    input, select { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
+    button { width: 100%; padding: 15px; background: #06C755; color: white; border: none; margin-top: 10px; font-size: 16px; border-radius: 5px; font-weight: bold; cursor: pointer; }
+    button:disabled { background: #ccc; }
+  </style>
+</head>
+<body>
+  <h2 style="text-align:center; color:#333;">お見積り作成</h2>
+  
+  <form id="estimateForm"></form>
+
+  <button id="sendBtn" onclick="sendData()" disabled>読み込み中...</button>
+
+  <script>
+    // ★★★ あなたのLIFF IDを入れてください ★★★
+    const LIFF_ID = "2009089391-BXK3sGbW";
+
+    // ★★★ 商品データ（ここに直接書いてください） ★★★
+    const items = [
+      { key: "A001", name: "商品A (基本セット)", price: 1000, unit: "個", type: "quantity" },
+      { key: "B002", name: "オプションB (延長保証)", price: 500, unit: "枠", type: "boolean" },
+      { key: "C003", name: "商品C (追加パーツ)", price: 300, unit: "個", type: "quantity" }
+    ];
+
+    // 画面を作る処理
+    const form = document.getElementById("estimateForm");
+    items.forEach(item => {
+      let html = `<div class="card"><label>${item.name}</label>
+                  <div class="price">単価: ¥${item.price.toLocaleString()} / ${item.unit}</div>`;
+      
+      if (item.type === 'boolean') {
+        html += `<select name="${item.key}" class="input-item">
+                  <option value="0">なし</option>
+                  <option value="1">あり</option>
+                 </select>`;
+      } else {
+        html += `<input type="number" name="${item.key}" class="input-item" value="0" min="0" placeholder="0">`;
+      }
+      html += `</div>`;
+      form.insertAdjacentHTML('beforeend', html);
+    });
+
+    // LIFF初期化
+    window.onload = async function() {
+      try {
+        await liff.init({ liffId: LIFF_ID });
+        
+        // 成功したらボタンを有効化
+        if (liff.isLoggedIn()) {
+            const btn = document.getElementById("sendBtn");
+            btn.disabled = false;
+            btn.innerText = "見積もりを計算する";
+        } else {
+            liff.login();
+        }
+      } catch (err) {
+        window.alert("初期化エラー: " + err.message);
+      }
+    };
+
+    // 送信処理
+    async function sendData() {
+      if (!liff.isInClient()) {
+        window.alert("スマホのLINEから開いてください");
+        return;
+      }
+
+      const inputs = document.querySelectorAll('.input-item');
+      let resultText = "【フォーム回答】\n";
+      let hasData = false;
+
+      inputs.forEach(input => {
+        if (input.value && input.value !== "0") {
+            resultText += `${input.name}:${input.value}\n`;
+            hasData = true;
+        }
+      });
+
+      if (!hasData) {
+        window.alert("商品を選択してください");
+        return;
+      }
+
+      try {
+        await liff.sendMessages([{ type: 'text', text: resultText }]);
+        liff.closeWindow();
+      } catch (err) {
+        window.alert("送信失敗: " + err.message);
+      }
+    }
+  </script>
+</body>
+</html>
