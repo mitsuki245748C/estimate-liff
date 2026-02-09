@@ -6,27 +6,32 @@
     <title>見積もりフォーム</title>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
-        /* デザインはそのまま維持 */
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f5f6f8; margin: 0; padding: 20px; color: #333; padding-bottom: 100px; }
         h2 { text-align: center; color: #111; margin-bottom: 20px; }
         .card { background: white; padding: 15px; margin-bottom: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
         .item-name { font-weight: bold; font-size: 16px; }
         .item-price { font-size: 13px; color: #666; background: #eee; padding: 2px 6px; border-radius: 4px; }
+        
+        /* 入力エリアのデザイン調整 */
         select, input { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ddd; border-radius: 6px; background: #fff; box-sizing: border-box; -webkit-appearance: none; }
         
+        /* 自由入力時のレイアウト（入力枠 + 単位） */
+        .input-group { display: flex; align-items: center; gap: 10px; }
+        .input-group input { text-align: right; font-weight: bold; }
+        .unit-label { font-size: 14px; color: #555; white-space: nowrap; }
+
         .btn-area { position: fixed; bottom: 0; left: 0; width: 100%; padding: 15px; background: white; border-top: 1px solid #eee; box-sizing: border-box; }
         button { width: 100%; padding: 15px; background: #06C755; color: white; border: none; font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer; opacity: 0.5; pointer-events: none; transition: 0.3s; }
         button.active { opacity: 1; pointer-events: auto; }
         
-        /* ローディング表示用 */
         #loader { text-align: center; margin-top: 50px; font-weight: bold; color: #666; }
     </style>
 </head>
 <body>
     <h2>📋 お見積り作成</h2>
     
-    <div id="loader">商品データを読み込み中...</div>
+    <div id="loader">ログインチェック中...</div>
     <form id="orderForm" style="display:none;"></form>
 
     <div class="btn-area">
@@ -37,27 +42,24 @@
         // ★LIFF ID (GitHub Pages用)
         const LIFF_ID = "2009089391-BXK3sGbW";
         
-        // ★親GASのウェブアプリURL (execで終わるもの)
+        // ★ここに「親GAS（統括GAS）」の新しいウェブアプリURLを貼ってください
         const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxIimc8ShnuABblD5RQkHiDvaU6PEWYJbW0rqDVSNfE_HfL8DW2xDk6FK_2PUYYHcZV/exec";
 
-        // 商品リストを入れる変数
         let items = [];
 
-        // LIFF初期化 & データ取得
         // LIFF初期化 & データ取得
         window.onload = async function() {
             try {
                 // 1. LIFF初期化
                 await liff.init({ liffId: LIFF_ID });
 
-                // ★追加: ログインしていなければ強制ログイン
-                // UserIDがないと商品データが引けないため
+                // 2. 未ログインならログインさせる
                 if (!liff.isLoggedIn()) {
                     liff.login();
-                    return; // ログイン画面へ遷移するのでここで終了
+                    return; 
                 }
 
-                // 2. UserIDを取得
+                // 3. UserIDを取得
                 const context = liff.getContext();
                 const userId = context.userId;
 
@@ -67,8 +69,7 @@
 
                 document.getElementById("loader").innerText = "商品データを読み込み中...";
 
-                // 3. GASへ問い合わせ (userIdを付与！)
-                // 末尾に ?userId=xxx をつけてアクセスします
+                // 4. GASへ問い合わせ (userIdを付与)
                 const fetchUrl = `${GAS_API_URL}?userId=${userId}`;
                 
                 const response = await fetch(fetchUrl);
@@ -76,7 +77,6 @@
 
                 // エラーチェック
                 if (!Array.isArray(data)) {
-                    // エラーメッセージが含まれている場合
                     if (data.error) {
                         throw new Error("GASエラー: " + data.error);
                     } else {
@@ -87,12 +87,11 @@
                 // 成功時
                 items = data;
                 
-                // 4. 画面生成
+                // 画面生成
                 renderForm();
                 document.getElementById("loader").style.display = "none";
                 document.getElementById("orderForm").style.display = "block";
                 
-                // ボタンの有効化チェック
                 checkForm();
 
             } catch (err) {
@@ -100,22 +99,26 @@
                 document.getElementById("loader").innerText = "読み込み失敗: " + err.message;
             }
         };
-        // フォーム描画関数
+
+        // フォーム描画
         function renderForm() {
             const form = document.getElementById("orderForm");
             items.forEach(item => {
                 let inputHtml = '';
-                // タイプ判定 (select: 有無, number: 個数)
+                
+                // ★変更点: タイプによって表示を分岐
                 if (item.type === 'select' || item.type === 'boolean') {
+                    // プルダウン（あり/なし）
                     inputHtml = `<select name="${item.id}" onchange="checkForm()">
                         <option value="0">不要</option>
                         <option value="1">必要 (+¥${item.price.toLocaleString()})</option>
                     </select>`;
                 } else {
-                    inputHtml = `<select name="${item.id}" onchange="checkForm()">
-                        <option value="0">0 ${item.unit}</option>
-                        ${[1,2,3,4,5,10].map(n => `<option value="${n}">${n} ${item.unit}</option>`).join('')}
-                    </select>`;
+                    // ★ここを修正: 自由入力（input type="number"）に変更
+                    inputHtml = `<div class="input-group">
+                        <input type="number" name="${item.id}" value="0" min="0" placeholder="0" oninput="checkForm()">
+                        <span class="unit-label">${item.unit}</span>
+                    </div>`;
                 }
 
                 const html = `
@@ -130,9 +133,9 @@
             });
         }
 
-        // 入力チェック
+        // 入力チェック (select と input の両方を監視)
         function checkForm() {
-            const inputs = document.querySelectorAll('select');
+            const inputs = document.querySelectorAll('select, input');
             let hasValue = false;
             inputs.forEach(input => {
                 if (parseInt(input.value) > 0) hasValue = true;
@@ -150,10 +153,9 @@
             }
         }
 
-        // ★修正ポイント: 送信処理 (余計な改行を削除)
         // 送信処理 (日本語対応版)
         async function sendOrder() {
-            const inputs = document.querySelectorAll('select');
+            const inputs = document.querySelectorAll('select, input');
             let lines = [];
             
             inputs.forEach(input => {
@@ -164,7 +166,7 @@
                     
                     if (item) {
                         let displayValue = val;
-                        // ブール型(type=boolean/select)の場合は「あり」に変換
+                        // ブール型の場合は「あり」に変換
                         if (item.type === 'boolean' || item.type === 'select') {
                              displayValue = "あり";
                         }
@@ -180,7 +182,7 @@
                 return;
             }
 
-            // ヘッダーはそのまま（GASが判定に使うため）
+            // ヘッダーを付けて送信
             const text = "【フォーム回答】\n" + lines.join("\n");
 
             try {
