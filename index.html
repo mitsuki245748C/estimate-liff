@@ -49,9 +49,20 @@
                 // 1. LIFF初期化
                 await liff.init({ liffId: LIFF_ID });
                 
-                // 2. GASから商品データ取得 (非同期)
+                // 2. GASから商品データ取得
                 const response = await fetch(GAS_API_URL);
-                items = await response.json();
+                const data = await response.json();
+
+                // ★追加: データの中身チェック
+                if (Array.isArray(data)) {
+                    // 成功時: 配列ならそのまま使う
+                    items = data;
+                } else {
+                    // 失敗時: エラー内容を表示して終了
+                    alert("データ取得エラー:\n" + JSON.stringify(data));
+                    document.getElementById("loader").innerText = "データの形式が不正です";
+                    return; 
+                }
                 
                 // 3. 画面生成
                 renderForm();
@@ -66,11 +77,10 @@
                 }
 
             } catch (err) {
-                alert("エラー: " + err.message);
+                alert("通信エラー: " + err.message);
                 document.getElementById("loader").innerText = "読み込み失敗";
             }
         };
-
         // フォーム描画関数
         function renderForm() {
             const form = document.getElementById("orderForm");
