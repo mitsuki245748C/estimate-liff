@@ -1,104 +1,149 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>見積もりフォーム</title>
-  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-  <style>
-    body { font-family: sans-serif; padding: 20px; background-color: #f0f0f0; padding-bottom: 100px; }
-    .card { background: white; padding: 15px; margin-bottom: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    label { display: block; font-weight: bold; margin-bottom: 5px; color: #333; }
-    .price { font-size: 0.85em; color: #666; margin-bottom: 8px; }
-    input, select { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
-    button { width: 100%; padding: 15px; background: #06C755; color: white; border: none; margin-top: 10px; font-size: 16px; border-radius: 5px; font-weight: bold; cursor: pointer; }
-    button:disabled { background: #ccc; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>見積もりフォーム</title>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <style>
+        /* デザインはそのまま維持 */
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f5f6f8; margin: 0; padding: 20px; color: #333; padding-bottom: 100px; }
+        h2 { text-align: center; color: #111; margin-bottom: 20px; }
+        .card { background: white; padding: 15px; margin-bottom: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .item-name { font-weight: bold; font-size: 16px; }
+        .item-price { font-size: 13px; color: #666; background: #eee; padding: 2px 6px; border-radius: 4px; }
+        select, input { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ddd; border-radius: 6px; background: #fff; box-sizing: border-box; -webkit-appearance: none; }
+        
+        .btn-area { position: fixed; bottom: 0; left: 0; width: 100%; padding: 15px; background: white; border-top: 1px solid #eee; box-sizing: border-box; }
+        button { width: 100%; padding: 15px; background: #06C755; color: white; border: none; font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer; opacity: 0.5; pointer-events: none; transition: 0.3s; }
+        button.active { opacity: 1; pointer-events: auto; }
+        
+        /* ローディング表示用 */
+        #loader { text-align: center; margin-top: 50px; font-weight: bold; color: #666; }
+    </style>
 </head>
 <body>
-  <h2 style="text-align:center; color:#333;">お見積り作成</h2>
-  
-  <form id="estimateForm"></form>
+    <h2>📋 お見積り作成</h2>
+    
+    <div id="loader">商品データを読み込み中...</div>
+    <form id="orderForm" style="display:none;"></form>
 
-  <button id="sendBtn" onclick="sendData()" disabled>読み込み中...</button>
+    <div class="btn-area">
+        <button id="sendBtn" onclick="sendOrder()">読み込み中...</button>
+    </div>
 
-  <script>
-    // ★★★ あなたのLIFF IDを入れてください ★★★
-    const LIFF_ID = "2009089391-BXK3sGbW";
-
-    // ★★★ 商品データ（ここに直接書いてください） ★★★
-    const items = [
-      { key: "A001", name: "商品A (基本セット)", price: 1000, unit: "個", type: "quantity" },
-      { key: "B002", name: "オプションB (延長保証)", price: 500, unit: "枠", type: "boolean" },
-      { key: "C003", name: "商品C (追加パーツ)", price: 300, unit: "個", type: "quantity" }
-    ];
-
-    // 画面を作る処理
-    const form = document.getElementById("estimateForm");
-    items.forEach(item => {
-      let html = `<div class="card"><label>${item.name}</label>
-                  <div class="price">単価: ¥${item.price.toLocaleString()} / ${item.unit}</div>`;
-      
-      if (item.type === 'boolean') {
-        html += `<select name="${item.key}" class="input-item">
-                  <option value="0">なし</option>
-                  <option value="1">あり</option>
-                 </select>`;
-      } else {
-        html += `<input type="number" name="${item.key}" class="input-item" value="0" min="0" placeholder="0">`;
-      }
-      html += `</div>`;
-      form.insertAdjacentHTML('beforeend', html);
-    });
-
-    // LIFF初期化
-    window.onload = async function() {
-      try {
-        await liff.init({ liffId: LIFF_ID });
+    <script>
+        // ★LIFF ID (GitHub Pages用)
+        const LIFF_ID = "2009089391-BXK3sGbW";
         
-        // 成功したらボタンを有効化
-        if (liff.isLoggedIn()) {
+        // ★親GASのウェブアプリURL (execで終わるもの)
+        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxIimc8ShnuABblD5RQkHiDvaU6PEWYJbW0rqDVSNfE_HfL8DW2xDk6FK_2PUYYHcZV/exec";
+
+        // 商品リストを入れる変数
+        let items = [];
+
+        // LIFF初期化 & データ取得
+        window.onload = async function() {
+            try {
+                // 1. LIFF初期化
+                await liff.init({ liffId: LIFF_ID });
+                
+                // 2. GASから商品データ取得 (非同期)
+                const response = await fetch(GAS_API_URL);
+                items = await response.json();
+                
+                // 3. 画面生成
+                renderForm();
+                document.getElementById("loader").style.display = "none";
+                document.getElementById("orderForm").style.display = "block";
+
+                // 4. ログインチェック
+                if (!liff.isLoggedIn()) {
+                    liff.login();
+                } else {
+                    checkForm();
+                }
+
+            } catch (err) {
+                alert("エラー: " + err.message);
+                document.getElementById("loader").innerText = "読み込み失敗";
+            }
+        };
+
+        // フォーム描画関数
+        function renderForm() {
+            const form = document.getElementById("orderForm");
+            items.forEach(item => {
+                let inputHtml = '';
+                // タイプ判定 (select: 有無, number: 個数)
+                if (item.type === 'select' || item.type === 'boolean') {
+                    inputHtml = `<select name="${item.id}" onchange="checkForm()">
+                        <option value="0">不要</option>
+                        <option value="1">必要 (+¥${item.price.toLocaleString()})</option>
+                    </select>`;
+                } else {
+                    inputHtml = `<select name="${item.id}" onchange="checkForm()">
+                        <option value="0">0 ${item.unit}</option>
+                        ${[1,2,3,4,5,10].map(n => `<option value="${n}">${n} ${item.unit}</option>`).join('')}
+                    </select>`;
+                }
+
+                const html = `
+                    <div class="card">
+                        <div class="label-row">
+                            <span class="item-name">${item.name}</span>
+                            <span class="item-price">¥${item.price.toLocaleString()}</span>
+                        </div>
+                        ${inputHtml}
+                    </div>`;
+                form.insertAdjacentHTML('beforeend', html);
+            });
+        }
+
+        // 入力チェック
+        function checkForm() {
+            const inputs = document.querySelectorAll('select');
+            let hasValue = false;
+            inputs.forEach(input => {
+                if (parseInt(input.value) > 0) hasValue = true;
+            });
             const btn = document.getElementById("sendBtn");
-            btn.disabled = false;
-            btn.innerText = "見積もりを計算する";
-        } else {
-            liff.login();
+            
+            if (hasValue && liff.isInClient()) {
+                btn.classList.add("active");
+                btn.innerText = "LINEに送信して計算";
+            } else if (!liff.isInClient()) {
+                btn.innerText = "LINEアプリから開いてください";
+            } else {
+                btn.classList.remove("active");
+                btn.innerText = "商品を選択してください";
+            }
         }
-      } catch (err) {
-        window.alert("初期化エラー: " + err.message);
-      }
-    };
 
-    // 送信処理
-    async function sendData() {
-      if (!liff.isInClient()) {
-        window.alert("スマホのLINEから開いてください");
-        return;
-      }
+        // ★修正ポイント: 送信処理 (余計な改行を削除)
+        async function sendOrder() {
+            const inputs = document.querySelectorAll('select');
+            
+            // 配列に一度格納することで、最後の改行を防ぐ
+            let lines = [];
+            
+            inputs.forEach(input => {
+                if (parseInt(input.value) > 0) {
+                    lines.push(`${input.name}:${input.value}`);
+                }
+            });
 
-      const inputs = document.querySelectorAll('.input-item');
-      let resultText = "【フォーム回答】\n";
-      let hasData = false;
+            // 結合 (joinを使うと末尾に改行が入りません)
+            const text = "【フォーム回答】\n" + lines.join("\n");
 
-      inputs.forEach(input => {
-        if (input.value && input.value !== "0") {
-            resultText += `${input.name}:${input.value}\n`;
-            hasData = true;
+            try {
+                await liff.sendMessages([{ type: 'text', text: text }]);
+                liff.closeWindow();
+            } catch (err) {
+                alert("送信失敗: " + err.message);
+            }
         }
-      });
-
-      if (!hasData) {
-        window.alert("商品を選択してください");
-        return;
-      }
-
-      try {
-        await liff.sendMessages([{ type: 'text', text: resultText }]);
-        liff.closeWindow();
-      } catch (err) {
-        window.alert("送信失敗: " + err.message);
-      }
-    }
-  </script>
+    </script>
 </body>
 </html>
