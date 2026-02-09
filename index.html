@@ -151,19 +151,36 @@
         }
 
         // ★修正ポイント: 送信処理 (余計な改行を削除)
+        // 送信処理 (日本語対応版)
         async function sendOrder() {
             const inputs = document.querySelectorAll('select');
-            
-            // 配列に一度格納することで、最後の改行を防ぐ
             let lines = [];
             
             inputs.forEach(input => {
-                if (parseInt(input.value) > 0) {
-                    lines.push(`${input.name}:${input.value}`);
+                const val = parseInt(input.value);
+                if (val > 0) {
+                    // IDから商品情報を探す
+                    const item = items.find(i => i.id === input.name);
+                    
+                    if (item) {
+                        let displayValue = val;
+                        // ブール型(type=boolean/select)の場合は「あり」に変換
+                        if (item.type === 'boolean' || item.type === 'select') {
+                             displayValue = "あり";
+                        }
+                        
+                        // 「商品名 : 値」の形式で追加
+                        lines.push(`${item.name}:${displayValue}`);
+                    }
                 }
             });
 
-            // 結合 (joinを使うと末尾に改行が入りません)
+            if (lines.length === 0) {
+                alert("商品を選択してください");
+                return;
+            }
+
+            // ヘッダーはそのまま（GASが判定に使うため）
             const text = "【フォーム回答】\n" + lines.join("\n");
 
             try {
