@@ -67,10 +67,20 @@
                     throw new Error("UserIDが取得できませんでした");
                 }
 
+                // ==========================================
+                // ★ SaaS対応：URLからBotのID(destination)を動的に抜き取る
+                // ==========================================
+                const urlParams = new URLSearchParams(window.location.search);
+                const destinationId = urlParams.get('destination');
+
+                if (!destinationId) {
+                    throw new Error("システムエラー：BotのIDが特定できません");
+                }
+
                 document.getElementById("loader").innerText = "商品データを読み込み中...";
 
-                // 4. GASへ問い合わせ (userIdを付与)
-                const fetchUrl = `${GAS_API_URL}?userId=${userId}`;
+                // 4. GASへ問い合わせ (userId, destination, actionを付与)
+                const fetchUrl = `${GAS_API_URL}?userId=${userId}&destination=${destinationId}&action=get_liff_data`;
                 
                 const response = await fetch(fetchUrl);
                 const data = await response.json();
@@ -106,7 +116,6 @@
             items.forEach(item => {
                 let inputHtml = '';
                 
-                // ★変更点: タイプによって表示を分岐
                 if (item.type === 'select' || item.type === 'boolean') {
                     // プルダウン（あり/なし）
                     inputHtml = `<select name="${item.id}" onchange="checkForm()">
@@ -114,7 +123,7 @@
                         <option value="1">必要 (+¥${item.price.toLocaleString()})</option>
                     </select>`;
                 } else {
-                    // ★ここを修正: 自由入力（input type="number"）に変更
+                    // 自由入力
                     inputHtml = `<div class="input-group">
                         <input type="number" name="${item.id}" value="0" min="0" placeholder="0" oninput="checkForm()">
                         <span class="unit-label">${item.unit}</span>
@@ -133,7 +142,7 @@
             });
         }
 
-        // 入力チェック (select と input の両方を監視)
+        // 入力チェック
         function checkForm() {
             const inputs = document.querySelectorAll('select, input');
             let hasValue = false;
@@ -153,7 +162,7 @@
             }
         }
 
-        // 送信処理 (日本語対応版)
+        // 送信処理
         async function sendOrder() {
             const inputs = document.querySelectorAll('select, input');
             let lines = [];
@@ -161,17 +170,13 @@
             inputs.forEach(input => {
                 const val = parseInt(input.value);
                 if (val > 0) {
-                    // IDから商品情報を探す
                     const item = items.find(i => i.id === input.name);
                     
                     if (item) {
                         let displayValue = val;
-                        // ブール型の場合は「あり」に変換
                         if (item.type === 'boolean' || item.type === 'select') {
                              displayValue = "あり";
                         }
-                        
-                        // 「商品名 : 値」の形式で追加
                         lines.push(`${item.name}:${displayValue}`);
                     }
                 }
@@ -182,7 +187,6 @@
                 return;
             }
 
-            // ヘッダーを付けて送信
             const text = "【フォーム回答】\n" + lines.join("\n");
 
             try {
